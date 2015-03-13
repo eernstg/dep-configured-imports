@@ -50,7 +50,7 @@ Example:
 import dart.platform == "browser"    : "some_uri.dart"
     || dart.platform == "standalone" : "other_uri.dart"
     || "default_uri.dart"
-    deferred as foo show x hide y;
+    deferred as foo show C func(bool b);
 ```
 
 Configurable import directives support `show` clauses, but not `hide`

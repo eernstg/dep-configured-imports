@@ -2,9 +2,9 @@
 
 ## Contact information
 
-Name: Erik Ernst
-E-mail: eernst@google.com
-[DEP Proposal Location][]
+Name: Erik Ernst  
+E-mail: eernst@google.com  
+[DEP Proposal Location][]  
 Further stakeholders:
 - Lasse R.H. Nielsen - lrn@google.com
 - Bob Nystrom - rnystrom@google.com
@@ -36,7 +36,7 @@ platforms, but which depend on platform-specific implementation for each platfor
 ## Proposal
 
 This proposal was created as a slight modification of the proposal
-['Dart Configurations/Configured Imports'][https://github.com/lrhn/dep-configured-imports]
+'Dart Configurations/Configured Imports' [https://github.com/lrhn/dep-configured-imports]
 by Lasse R.H. Nielsen. As a result, the the proposal is simplified in
 order to enable a very simple static analysis situation. This is done
 by only allowing top-level functions to be imported, and in return

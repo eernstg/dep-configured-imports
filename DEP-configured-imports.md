@@ -30,8 +30,10 @@ Problems to solve:
   formatters, and a deployment will only want to include the ones that it
   actually uses.
 
-The former problem is a blocker for having libraries that work on multiple
-platforms, but which depend on platform-specific implementation for each platform.
+Problems to avoid:
+
+* The mechanism should not make the static analysis substantially more
+  complex.
 
 ## Proposal
 
@@ -77,8 +79,8 @@ A configurable import directive imports the empty name space by
 default, and hence `hide` clauses are not supported. But `show`
 clauses are supported and must be used in order to populate the
 imported name space. For each `typeAliasBody` in the `show` clauses,
-the embedded `identifier` is imported. It must denote a top-level
-function in the imported library.
+the `identifier` in its `functionTypePrefix` is imported. It must
+denote a top-level function in the imported library.
 
 The actual `uri` representing the library to import is found by evaluating a `test` to a boolean result, then picking the following string literal if the test is true, otherwise proceeding to the next (optional) `uri` and trying that. If testing falls through to the empty `uriOpt`, the import fails.
 
@@ -119,24 +121,25 @@ A `dotNames` is converted to a string by creating a string from the characters o
 When statically analyzing a library that has configured imports, the
 exported namespace of the library consists exclusively of the set of
 identifiers in the `functionTypePrefix` of the given `show`
-clauses. For each such identifier, the static type is the type that
+clauses. For each such `identifier`, the static type is the type that
 would be denoted by the same `typeAliasBody` occurring in a `typedef`.
 
-For each such identifier, it is a compile-time error if a configurably
-imported library does not export a top-level function with that
-name. It is a static warning if a configurably imported library
-exports a top-level function with that name whose type is not a
-subtype of the static type from the import directive.
+For each such `identifier`, it is a compile-time error if a
+configurably imported library does not export a top-level function
+with that name. It is a static warning if a configurably imported
+library exports a top-level function with that name whose type is not
+a subtype of the static type from the import directive.
 
 This means that all configurably imported libraries from the same
 configurable import directive will have exactly the same static shape,
 and analysis will not need to inspect any of the configurably imported
 libraries in order to perform static analysis of the importing
-library. This makes static analysis independent of configuration.
+library. This makes the static analysis of each library independent of
+the choices made in its configurable imports.
 
 ## Platform libraries
 
-The platform and the availability of platform libraries, are signalled by the runtime or compiler by a pre-set environment definitions.
+The platform and the availability of platform libraries are signalled by the runtime or compiler by pre-set environment definitions.
 
 Suggested definitions in the browser:
 
@@ -170,10 +173,11 @@ A library can use [`const String.fromEnvironment`][env] to check configuration c
 
 An analysis tool, like the Dart Analyzer, will be able to exploit the
 simplicity of the static shapes of configurable imports: They simply
-add a few top-level functions to the name space. When inspecting
+add a few top-level functions to the name space, no matter which
+configurably imported libraries are chosen. When inspecting
 potential implementations of a given function it may be necessary to
-inspect multiple declarations, e.g., one per platform, but that would
-not be more complex than the case where a method is invoked and
+inspect multiple declarations, e.g., one per configuration, but that
+would not be more complex than the case where a method is invoked and
 dispatch enables multiple method implementations to be the code
 that actually runs.
 
@@ -239,7 +243,7 @@ User configurations:
 library logger;
 import com.example.logger.level == "verbose" : "src/verbose.dart"
     || com.example.logger.level == "simple"  : "src/plain.dart"
-    || "src/plain.dart" show ..;
+    || "src/plain.dart" show ...;
 ```
 
 Here a logging library allows the system to pick a verbose output strategy by setting an environment variable. It defaults to the plain version.

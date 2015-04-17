@@ -12,7 +12,8 @@ Further stakeholders:
 
 ## Summary
 
-Allow imports to depend on the runtime environment or user configuration.
+Allow imports to depend on the runtime environment or user configuration
+while ensuring that types remain simple and unambiguous.
 
 ## Motivation
 
@@ -39,10 +40,24 @@ Problems to avoid:
 
 This proposal was created as a slight modification of the proposal
 'Dart Configurations/Configured Imports' [https://github.com/lrhn/dep-configured-imports]
-by Lasse R.H. Nielsen. As a result, the the proposal is simplified in
-order to enable a very simple static analysis situation. This is done
-by only allowing top-level functions to be imported, and in return
-allowing them to have type annotations in the import.
+by Lasse R.H. Nielsen.
+
+That proposal has been simplified in order to enable a very simple static
+analysis situation.  This is done by only allowing top-level non-type
+declarations to be imported, that is, top level functions, getters,
+setters, and variables.
+
+In order to ensure that a standard type checking approach can be used, the
+imported entities can have an associated type declaration in the import
+directive, which must use types available on the configuration-independent
+side. The different variants of the configuration-dependent side may
+provide different behaviors and use configuration-dependent subtypes of the
+types declared in the configurable import, but they are all used by the
+configuration-independent code under the types declared in the import.
+
+This means that configuration dependencies are confined to the
+configurably imported libraries, and the libraries using configurable
+imports can remain truly configuration independent.
 
 ### Syntax
 
@@ -57,7 +72,8 @@ import dart.platform == "browser"    : "some_uri.dart"
 
 Configurable import directives support `show` clauses, but not `hide`
 clauses. The construct to `show` is not an identifier, but a typed
-identifier, using the syntactic category `typeAliasBody`.  The `uri`
+identifier, using the syntactic category `typeAliasBody` for functions and
+similar constructs for variables, getters, and setters.  The `uri`
 in the `import` production is replaced by `configuredUri` with the
 following grammar:
 
@@ -75,12 +91,13 @@ declarations.
 
 ### Runtime Semantics
 
-A configurable import directive imports the empty name space by
-default, and hence `hide` clauses are not supported. But `show`
-clauses are supported and must be used in order to populate the
-imported name space. For each `typeAliasBody` in the `show` clauses,
-the `identifier` in its `functionTypePrefix` is imported. It must
-denote a top-level function in the imported library.
+A configurable import directive imports the empty name space by default,
+and hence `hide` clauses are not supported. But `show` clauses are
+supported and must be used in order to populate the imported name
+space. For each `typeAliasBody` in the `show` clauses, the `identifier` in
+its `functionTypePrefix` is imported. It must denote a top-level function
+in the imported library. The other constructs (variables, getters, setters)
+are treated similarly.
 
 The actual `uri` representing the library to import is found by evaluating a `test` to a boolean result, then picking the following string literal if the test is true, otherwise proceeding to the next (optional) `uri` and trying that. If testing falls through to the empty `uriOpt`, the import fails.
 
@@ -119,23 +136,38 @@ A `dotNames` is converted to a string by creating a string from the characters o
 ### Static Semantics
 
 When statically analyzing a library that has configured imports, the
-exported namespace of the library consists exclusively of the set of
-identifiers in the `functionTypePrefix` of the given `show`
-clauses. For each such `identifier`, the static type is the type that
-would be denoted by the same `typeAliasBody` occurring in a `typedef`.
+imported namespace from the configurably imported libraries consists
+of exactly the set of imported identifiers. For each such `identifier`, the
+static type for a top level function is the type that would be denoted by
+the same `typeAliasBody` occurring in a `typedef`, and similarly for the
+other constructs.
 
-For each such `identifier`, it is a compile-time error if a
-configurably imported library does not export a top-level function
-with that name. It is a static warning if a configurably imported
-library exports a top-level function with that name whose type is not
-a subtype of the static type from the import directive.
+For each such `identifier`, it is a compile-time error if a configurably
+imported library does not export a top-level function (variable, getter,
+setter) with that name. It is a static warning if a configurably imported
+library exports a top-level function (variable, setter, getter) with that
+name whose type is not a subtype of the static type from the import
+directive, or if the exported entity is of a different kind than the one
+that is declared in the configurable import (e.g., the import indicates
+that it is a getter, but it is in fact a function).
 
 This means that all configurably imported libraries from the same
 configurable import directive will have exactly the same static shape,
 and analysis will not need to inspect any of the configurably imported
 libraries in order to perform static analysis of the importing
-library. This makes the static analysis of each library independent of
-the choices made in its configurable imports.
+library.
+
+Similarly, the check whether a given configurably imported library conforms
+to the static shape declared in the configurable import directive importing
+it can be performed with respect to the configurable import statement and
+each configurably imported library in isolation. Hence, the explicit
+"signature" in the import directive ensures modular type checking of the
+relationship between configurably imported libraries and the library that
+contains a configurable import.
+
+This makes the static analysis situation very clear and very simple to
+handle, because it is built to ensure a strict separation of the
+configuration dependent and the configuration independent code.
 
 ## Platform libraries
 
@@ -161,28 +193,32 @@ Platforms can be added in the future, but tools need to support them. A compiler
 
 ### User configurations
 
-User configurations can be implemented by setting variables with `-Dfoo.bar=baz` on the command line and testing using `foo.bar == "baz"` in the import expressions.
+User configurations can be implemented by setting variables with `-Dfoo.bar=baz` on the command line and tested using `foo.bar == "baz"` in the import expressions.
 
 ### Programmatic configuration
 
-A library can use [`const String.fromEnvironment`][env] to check configuration choices at runtime. The same environment values used in imports can also be used in code. This allows, e.g., switching from import based configuration to programmatic configuration if it is considered simpler, or simple configuration could be done programmatically while developing, and then later switch to import based configuration to avoid importing unused libraries.
+A library can use [`const String.fromEnvironment`][env] to check
+configuration choices at runtime. The same environment values used in
+imports can also be used in code. This allows implementations to introduce
+configuration dependencies into (otherwise) configuration independent code,
+which may be hard to avoid in some cases.
 
 [env]: https://api.dartlang.org/apidocs/channels/stable/dartdoc-viewer/dart:core.String#id_String-fromEnvironment
 
 ### Analysis Tools
 
 An analysis tool, like the Dart Analyzer, will be able to exploit the
-simplicity of the static shapes of configurable imports: They simply
-add a few top-level functions to the name space, no matter which
-configurably imported libraries are chosen. When inspecting
-potential implementations of a given function it may be necessary to
-inspect multiple declarations, e.g., one per configuration, but that
-would not be more complex than the case where a method is invoked and
-dispatch enables multiple method implementations to be the code
-that actually runs.
+simplicity of the static shapes of configurable imports: They simply add a
+few top-level entities to the name space, and they are the same with the
+same types no matter which configurably imported libraries are chosen. When
+inspecting potential implementations of a given function it may be
+necessary to inspect multiple declarations, e.g., one per configuration,
+but that would not be more complex than the case where a method is invoked
+and dispatch enables multiple method implementations to be the code that
+actually runs.
 
 It may be useful for a tool to allow users to specify one or some
-possible configurations and omit others, and then only show the
+configurations "of interest" and omit others, and then only show the
 possible implementations of configurably imported functions that match
 this constraint.
 
@@ -223,14 +259,17 @@ Using different platform features:
 
 ```dart
 library platform.independent.library;
-import dart.feature.dom : "html_based.dart"
-    || dart.feature.io : "io_based.dart"
-    show C func(T t);
+import dart.feature.dom : "foobar_html_based.dart"
+    || dart.feature.io : "foobar_io_based.dart"
+    show FooBar func(T t);
 
-// Code using func(_) to get platform specific behavior,
-// including the case where [func] is a factory producing an
-// instance of a platform specific subclass of C, offering
-// a wider range of features.
+// Code using func(_) to get platform specific behavior, but
+// typed exclusively using platform independent types. Note
+// in particular the case where [func] is a factory producing an
+// instance of a platform specific subclass of FooBar, offering
+// a wider range of features: That object may be seen a first class
+// library which can offer everything that a normal library can
+// offer, except for types.
 ...
 ```
 
@@ -251,10 +290,11 @@ In many cases, importing both and selecting at runtime is not a problem, but if 
 
 ## Alternatives
 
-The syntax is deliberately simple. It allows tools to read the import statements without needing to understand any Dart semantics, only only simple syntax.
+The syntax is deliberately simple. It allows tools to read the import statements without needing to understand any Dart semantics, only simple syntax.
 Since string literals have no interpolations, all possible URI references that can be used for the import are statically known. Since tests are simple, the configurations necessary to trigger a specific import are easily derived.
 
 ### Condition expressions.
+
 An alternative would be a more expressive condition language, for example adding logical and/or operators to combine multiple tests.
 Any addition to the expression language will enable some new use-cases that would otherwise be harder (not necessarily impossible), but will likely also cause requests for further additions for new edge-cases that are almost handled.
 
@@ -263,11 +303,13 @@ The more complex the language, the harder it will be for tools to analyze a libr
 Pure logical and/or operators can already be implemented by conditionally importing intermediate libraries with further conditional exports. It's verbose, but expected to be rarely needed. If it is needed, the extra library might actually correspond to a meaningful abstraction.
 
 ### String expressions.
+
 Instead of having separate condition expressions and string literals, the entire `configuredUri` could be a string expression, allowing (some) string interpolations, or even conditional expressions choosing between strings.
 
 If the import `uri` can embed the value of a system environment property, then there is no way for tools to enumerate the possible imports. A tool will at most be able to analyze a library with regard to a set of known configurations, but will not be able to determine the possible configurations.
 
 ### Full compile-time constant expressions.
+
 The logical limit for expressiveness, either of the condition expressions or of string expressions, is to allow any compile-time constant expression. There needs to be some limit on which variables/declarations are available to the expression since the value is computed *before* any `import` or `part` declarations are processed. At most, this could allow access to declarations of `dart:core`, with a special case disallowing the use of conditions inside `dart:core`. That would still allow access to `String.fromEnvironment`, so there would be no need for the `dotNames` syntax for accessing the environment.
 
 Using any compile-time constant expression would require all tools that process Dart libraries to have an implementation of the full Dart compile-time constant semantics, which is more complicated than necessary. Also, later language changes may add more compile time constant expressions, at which point all the tools would also need to be updated.
